@@ -8,12 +8,17 @@ import (
 )
 
 type App struct {
-	Handler *http.Handler
+	Handler        *http.Handler
+	PaymentUseCase *usecase.CreatePayment
 }
 
 func NewApp(db *sql.DB) *App {
 	repo := postgres.NewPaymentRepo(db)
 	uc := usecase.NewCreatePayment(repo)
 	handler := http.NewHandler(uc)
-	return &App{Handler: handler}
+
+	return &App{
+		Handler:        handler,
+		PaymentUseCase: uc,
+	}
 }

@@ -9,5 +9,4 @@ type OrderRepository interface {
 	Save(ctx context.Context, o domain.Order) error
 	GetByID(ctx context.Context, id string) (*domain.Order, error)
 	UpdateStatus(ctx context.Context, id, status string) error
-	GetRecent(ctx context.Context, limit int) ([]domain.Order, error)
 }

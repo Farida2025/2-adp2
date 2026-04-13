@@ -1,29 +1,27 @@
 package usecase
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
-	"net/http"
 	"order-service/internal/domain"
 	"order-service/internal/repository"
-	"time"
 
 	"github.com/google/uuid"
 )
 
-type CreateOrder struct {
-	repo          repository.OrderRepository
-	paymentClient *http.Client
-	paymentURL    string
+type PaymentProvider interface {
+	Authorize(ctx context.Context, orderID string, amount int64) (string, error)
 }
 
-func NewCreateOrder(repo repository.OrderRepository, paymentURL string) *CreateOrder {
+type CreateOrder struct {
+	repo            repository.OrderRepository
+	paymentProvider PaymentProvider
+}
+
+func NewCreateOrder(repo repository.OrderRepository, pp PaymentProvider) *CreateOrder {
 	return &CreateOrder{
-		repo:          repo,
-		paymentClient: &http.Client{Timeout: 2 * time.Second},
-		paymentURL:    paymentURL,
+		repo:            repo,
+		paymentProvider: pp,
 	}
 }
 
@@ -51,32 +49,21 @@ func (uc *CreateOrder) Execute(ctx context.Context, cmd CreateOrderCommand) (str
 		return "", err
 	}
 
-	payload := map[string]interface{}{
-		"order_id": order.ID,
-		"amount":   cmd.Amount,
+	status, err := uc.paymentProvider.Authorize(ctx, order.ID, cmd.Amount)
+
+	if err != nil {
+		uc.repo.UpdateStatus(ctx, order.ID, "Failed")
+		return "", fmt.Errorf("payment service unavailable: %w", err)
 	}
 
-	body, err := json.Marshal(payload)
-	if err != nil {
+	if status != "Authorized" {
+		uc.repo.UpdateStatus(ctx, order.ID, "Failed")
+		return "", fmt.Errorf("payment declined: status %s", status)
+	}
+
+	if err := uc.repo.UpdateStatus(ctx, order.ID, "Paid"); err != nil {
 		return "", err
 	}
 
-	resp, err := uc.paymentClient.Post(
-		uc.paymentURL+"/payments",
-		"application/json",
-		bytes.NewReader(body),
-	)
-	if err != nil {
-		uc.repo.UpdateStatus(ctx, order.ID, "Failed")
-		return "", fmt.Errorf("payment service unavailable")
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		uc.repo.UpdateStatus(ctx, order.ID, "Failed")
-		return "", fmt.Errorf("payment declined")
-	}
-
-	uc.repo.UpdateStatus(ctx, order.ID, "Paid")
 	return order.ID, nil
 }

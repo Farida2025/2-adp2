@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"log"
 	"order-service/internal/app"
+	"os"
 
 	"github.com/gin-gonic/gin"
 	_ "github.com/lib/pq"
@@ -16,14 +17,18 @@ func main() {
 	}
 	defer db.Close()
 
-	paymentURL := "http://localhost:8081"
+	paymentGRPCAddr := os.Getenv("PAYMENT_GRPC_ADDR")
+	if paymentGRPCAddr == "" {
+		log.Fatal("PAYMENT_GRPC_ADDR is not set")
+	}
 
-	app := app.NewApp(db, paymentURL)
+	application := app.NewApp(db, paymentGRPCAddr)
+	defer application.GRPCAdapter.Close()
 
 	r := gin.Default()
-	app.Handler.RegisterRoutes(r)
+	application.Handler.RegisterRoutes(r)
 
-	log.Println("Order Service running on :8080")
+	log.Println("Order Service running on :8080 (gRPC enabled)")
 	if err := r.Run(":8080"); err != nil {
 		log.Fatal(err)
 	}

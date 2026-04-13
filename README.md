@@ -1,86 +1,234 @@
-# Assignment 1 – Clean Architecture based Microservices (Order & Payment)
+# Advanced Programming 2 — Assignment 2
 
-**Student:** Farida Dovletbaeva  
-**Course:** Advanced Programming 2  
-**Date:** April 2026
+**gRPC Migration & Contract-First Development**
 
-## Overview
+Student: Farida Dovletbayeva
+Astana IT University
+Course: Advanced Programming 2
 
-This project implements a simple two-service platform consisting of **Order Service** and **Payment Service**.  
-Both services follow **Clean Architecture** principles and demonstrate basic **Microservices** concepts:
-- Bounded Contexts
-- Database per Service
-- Synchronous REST communication with timeout
-- Separation of Concerns and Dependency Inversion
+---
 
+# Overview
 
-Each service has its own:
-- Domain models
-- Use cases (business logic)
-- Repository layer (with interface)
-- HTTP handlers (thin layer)
-- Separate PostgreSQL database
+This project is a migration of a microservice system from REST to gRPC using a Contract-First approach.
 
-## Technologies
+The system consists of two services:
 
-- Go 1.23
-- Gin (HTTP framework)
-- PostgreSQL (Database per Service)
-- Clean Architecture
-- REST communication
+* Order Service (REST API + gRPC client)
+* Payment Service (REST API + gRPC server)
 
-## How to Run
+---
 
-1. Make sure PostgreSQL is running and two databases are created:
-    - `order_db`
-    - `payment_db`
+# Architecture
 
-2. Apply migrations (run SQL scripts from `migrations/schema.sql` in each database).
+* Clean Architecture is preserved
+* Business logic (Use Cases) is unchanged from Assignment 1
+* Only the communication layer is migrated from REST to gRPC
 
-3. Start **Payment Service** first:
-   ```bash
-   cd payment-service
-   go run cmd/payment/main.go
+```
+[ Client ]
+    ↓ REST (Gin)
+[ Order Service ]
+    ↓ gRPC
+[ Payment Service ]
+    ↓
+[ PostgreSQL ]
+```
 
-## Architecture Decisions
+---
 
-- **Clean Architecture**:
-    - Business logic is located in the Use Cases layer
-    - Handlers are thin — they only parse requests and return responses
-    - Use cases depend on interfaces (ports), not on concrete implementations
-    - Composition root (dependency wiring) is done in `main.go`
+# Technologies Used
 
-- **Microservices**:
-    - Separate databases for each service (`order_db` and `payment_db`)
-    - No shared models or code between the two services
-    - Order Service communicates with Payment Service via REST with a 2-second timeout
+* Go (Golang)
+* gRPC
+* Protocol Buffers
+* Gin (REST API)
+* PostgreSQL
+* Clean Architecture
 
-- **Resilience**:
-    - If Payment Service is down or slow, Order Service returns HTTP 503 Service Unavailable
-    - The order status is changed to "Failed"
+---
 
-- **Business Rules**:
-    - Money amount is stored as `int64` (in cents) for financial accuracy
-    - If amount > 100000, Payment Service returns "Declined"
-    - Only orders with status "Pending" can be cancelled
+# Repositories
 
-## Failure Scenario
+### Proto Repository (Contract-First)
 
-When the Payment Service is unavailable:
+Contains `.proto` files:
+https://github.com/Farida2025/assignment2-adp2
 
-- `http.Client` timeout of 2 seconds is triggered
-- Order status is updated to "Failed"
-- The API returns HTTP 503 Service Unavailable
+---
 
-## Diagram
+### Generated Code Repository
 
-See `diagram.png` in the root folder.
+Contains generated `.pb.go` files:
+https://github.com/Farida2025/assignment2-generated
 
-The diagram illustrates:
-- Two independent services with Clean Architecture layers (Domain → Use Case → Repository → Transport)
-- REST communication between Order Service and Payment Service
-- Separate databases for each service
+---
 
-## Conclusion
+# Protobuf Contract
 
-This project demonstrates the proper application of **Clean Architecture** principles inside each service and basic **Microservices** concepts (bounded contexts, database per service, and resilient synchronous communication) as taught in Lecture 1 and Lecture 2.
+```proto
+syntax = "proto3";
+
+package payment;
+
+option go_package = "github.com/Farida2025/assignment2-generated/payment";
+
+service PaymentService {
+  rpc ProcessPayment (PaymentRequest) returns (PaymentResponse);
+}
+
+message PaymentRequest {
+  string order_id = 1;
+  int64 amount = 2;
+}
+
+message PaymentResponse {
+  string transaction_id = 1;
+  string status = 2;
+}
+```
+
+---
+
+# Configuration
+
+### Environment Variables
+
+| Variable          | Description                                       |
+| ----------------- | ------------------------------------------------- |
+| PAYMENT_GRPC_ADDR | Address of Payment Service (e.g. localhost:50051) |
+
+---
+
+# How to Run
+
+## 1. Start PostgreSQL
+
+Create databases:
+
+```sql
+CREATE DATABASE order_db;
+CREATE DATABASE payment_db;
+```
+
+---
+
+## 2. Run Payment Service
+
+```bash
+cd assignment1/payment-service
+go run cmd/payment/main.go
+```
+
+Runs:
+
+* gRPC server on :50051
+* REST API on :8081
+
+---
+
+## 3. Run Order Service
+
+### Windows PowerShell:
+
+```powershell
+$env:PAYMENT_GRPC_ADDR="localhost:50051"
+go run cmd/order/main.go
+```
+
+### Linux / macOS:
+
+```bash
+PAYMENT_GRPC_ADDR=localhost:50051 go run cmd/order/main.go
+```
+
+Runs:
+
+* REST API on :8080
+
+---
+
+# API Endpoints
+
+## Order Service (REST)
+
+| Method | Endpoint           |
+| ------ | ------------------ |
+| POST   | /orders            |
+| GET    | /orders/:id        |
+| PATCH  | /orders/:id/cancel |
+
+---
+
+## Payment Service (REST - optional)
+
+| Method | Endpoint            |
+| ------ | ------------------- |
+| POST   | /payments           |
+| GET    | /payments/:order_id |
+
+---
+
+# gRPC Communication
+
+* Order Service acts as a gRPC client
+* Payment Service acts as a gRPC server
+* Communication uses strongly typed contracts
+
+---
+
+# Timeout Handling
+
+Order Service uses a custom timeout (2 seconds):
+
+```go
+ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
+```
+
+---
+
+# Error Handling
+
+Uses gRPC status codes:
+
+* codes.Internal — server error
+* codes.FailedPrecondition — payment declined
+
+---
+
+# Design Highlights
+
+* Clean Architecture preserved
+* Dependency Inversion applied
+* No business logic in transport layer
+* Contract-First development
+* gRPC replaces REST between services
+* Environment-based configuration (no hardcoding)
+
+---
+
+# Assignment Requirements Coverage
+
+| Requirement           | Status |
+| --------------------- | ------ |
+| Contract-First        | Done   |
+| gRPC Client/Server    | Done   |
+| Clean Architecture    | Done   |
+| Env Configuration     | Done   |
+| Timeout               | Done   |
+| Error Handling        | Done   |
+| Repository Separation | Done   |
+
+---
+
+# Notes
+
+* REST is kept only for external clients
+* Internal communication is fully migrated to gRPC
+* Generated code is imported via Go modules
+
+---
+
+# Conclusion
+
+This project demonstrates a full migration from REST to gRPC while preserving architectural principles and improving type safety, performance, and maintainability.

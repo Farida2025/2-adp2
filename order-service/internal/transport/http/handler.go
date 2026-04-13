@@ -1,27 +1,31 @@
-package http
+package handler
 
 import (
 	"net/http"
 	"order-service/internal/usecase"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 )
 
 type Handler struct {
-	createOrder     *usecase.CreateOrder
-	getRecentOrders *usecase.GetRecentOrders
+	createOrder *usecase.CreateOrder
+	getOrder    *usecase.GetOrder
+	cancelOrder *usecase.CancelOrder
 }
 
-func NewHandler(createOrder *usecase.CreateOrder, getRecentOrders *usecase.GetRecentOrders) *Handler {
-	return &Handler{createOrder: createOrder,
-		getRecentOrders: getRecentOrders}
+func NewHandler(co *usecase.CreateOrder, goUc *usecase.GetOrder, ca *usecase.CancelOrder) *Handler {
+	return &Handler{
+		createOrder: co,
+		getOrder:    goUc,
+		cancelOrder: ca,
+	}
 }
 
 func (h *Handler) RegisterRoutes(r *gin.Engine) {
 	r.POST("/orders", h.CreateOrder)
 	r.GET("/orders/:id", h.GetOrder)
 	r.PATCH("/orders/:id/cancel", h.CancelOrder)
-	r.GET("/orders/recent", h.GetRecentOrders)
 }
 
 func (h *Handler) CreateOrder(c *gin.Context) {
@@ -34,7 +38,7 @@ func (h *Handler) CreateOrder(c *gin.Context) {
 
 	orderID, err := h.createOrder.Execute(c.Request.Context(), cmd)
 	if err != nil {
-		if err.Error() == "payment service unavailable" || err.Error() == "payment declined" {
+		if strings.Contains(err.Error(), "payment") || err.Error() == "payment declined" {
 			c.JSON(http.StatusServiceUnavailable, gin.H{"error": err.Error()})
 			return
 		}
@@ -47,32 +51,20 @@ func (h *Handler) CreateOrder(c *gin.Context) {
 
 func (h *Handler) GetOrder(c *gin.Context) {
 	id := c.Param("id")
-	c.JSON(http.StatusOK, gin.H{
-		"order_id": id,
-		"message":  "order details (simplified)",
-	})
+	order, err := h.getOrder.Execute(c.Request.Context(), id)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, order)
 }
 
 func (h *Handler) CancelOrder(c *gin.Context) {
 	id := c.Param("id")
-	c.JSON(http.StatusOK, gin.H{
-		"message":  "order cancelled (if pending)",
-		"order_id": id,
-	})
-}
-
-func (h *Handler) GetRecentOrders(c *gin.Context) {
-	var cmd usecase.GetRecentOrderCommand
-	if err := c.ShouldBindQuery(&cmd); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid input"})
-		return
-	}
-	orders, err := h.getRecentOrders.Execute(c.Request.Context(), cmd)
-
+	err := h.cancelOrder.Execute(c.Request.Context(), id)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, orders)
-
+	c.JSON(http.StatusOK, gin.H{"message": "order cancelled successfully"})
 }

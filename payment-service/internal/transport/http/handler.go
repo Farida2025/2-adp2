@@ -38,5 +38,5 @@ func (h *Handler) CreatePayment(c *gin.Context) {
 
 func (h *Handler) GetPayment(c *gin.Context) {
 	orderID := c.Param("order_id")
-	c.JSON(http.StatusOK, gin.H{"order_id": orderID, "status": "exists"})
+	c.JSON(http.StatusOK, gin.H{"order_id": orderID, "status": "Authorized"})
 }

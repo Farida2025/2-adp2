@@ -2,19 +2,35 @@ package app
 
 import (
 	"database/sql"
+	"log"
+	"order-service/internal/infrastructure/payment"
 	"order-service/internal/repository/postgres"
-	"order-service/internal/transport/http"
+	delivery "order-service/internal/transport/http"
 	"order-service/internal/usecase"
 )
 
 type App struct {
-	Handler *http.Handler
+	Handler     *delivery.Handler
+	GRPCAdapter *payment.GRPCAdapter
 }
 
-func NewApp(db *sql.DB, paymentURL string) *App {
+func NewApp(db *sql.DB, paymentGRPCAddr string) *App {
 	repo := postgres.NewOrderRepo(db)
-	Uc := usecase.NewCreateOrder(repo, paymentURL)
-	recentUc := usecase.NewGetRecentOrders(repo)
-	handler := http.NewHandler(Uc, recentUc)
-	return &App{Handler: handler}
+
+	paymentAdapter, err := payment.NewGRPCAdapter(paymentGRPCAddr)
+	if err != nil {
+		log.Fatal("Failed to create payment gRPC adapter:", err)
+	}
+
+	getUc := usecase.NewGetOrder(repo)
+	cancelUc := usecase.NewCancelOrder(repo)
+
+	createOrderUc := usecase.NewCreateOrder(repo, paymentAdapter)
+
+	h := delivery.NewHandler(createOrderUc, getUc, cancelUc)
+
+	return &App{
+		Handler:     h,
+		GRPCAdapter: paymentAdapter,
+	}
 }

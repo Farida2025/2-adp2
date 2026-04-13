@@ -4,7 +4,10 @@ import (
 	"context"
 	"database/sql"
 	"payment-service/internal/domain"
+	"payment-service/internal/repository"
 )
+
+var _ repository.PaymentRepository = (*PaymentRepo)(nil)
 
 type PaymentRepo struct {
 	db *sql.DB
