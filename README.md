@@ -1,12 +1,6 @@
 # Advanced Programming 2 — Assignment 2
 
-**gRPC Migration & Contract-First Development**
 
-Student: Farida Dovletbayeva
-Astana IT University
-Course: Advanced Programming 2
-
----
 
 # Overview
 
@@ -21,7 +15,6 @@ The system consists of two services:
 
 # Architecture
 
-* Clean Architecture is preserved
 * Business logic (Use Cases) is unchanged from Assignment 1
 * Only the communication layer is migrated from REST to gRPC
 
@@ -37,23 +30,13 @@ The system consists of two services:
 
 ---
 
-# Technologies Used
-
-* Go (Golang)
-* gRPC
-* Protocol Buffers
-* Gin (REST API)
-* PostgreSQL
-* Clean Architecture
-
----
 
 # Repositories
 
 ### Proto Repository (Contract-First)
 
 Contains `.proto` files:
-https://github.com/Farida2025/assignment2-adp2
+https://github.com/Farida2025/assignment2-protos
 
 ---
 
@@ -127,26 +110,7 @@ Runs:
 
 ---
 
-## 3. Run Order Service
 
-### Windows PowerShell:
-
-```powershell
-$env:PAYMENT_GRPC_ADDR="localhost:50051"
-go run cmd/order/main.go
-```
-
-### Linux / macOS:
-
-```bash
-PAYMENT_GRPC_ADDR=localhost:50051 go run cmd/order/main.go
-```
-
-Runs:
-
-* REST API on :8080
-
----
 
 # API Endpoints
 
@@ -207,19 +171,6 @@ Uses gRPC status codes:
 
 ---
 
-# Assignment Requirements Coverage
-
-| Requirement           | Status |
-| --------------------- | ------ |
-| Contract-First        | Done   |
-| gRPC Client/Server    | Done   |
-| Clean Architecture    | Done   |
-| Env Configuration     | Done   |
-| Timeout               | Done   |
-| Error Handling        | Done   |
-| Repository Separation | Done   |
-
----
 
 # Notes
 
