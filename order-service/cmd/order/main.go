@@ -6,11 +6,14 @@ import (
 	"order-service/internal/app"
 	"os"
 
+	"github.com/joho/godotenv"
+
 	"github.com/gin-gonic/gin"
 	_ "github.com/lib/pq"
 )
 
 func main() {
+	godotenv.Load()
 	db, err := sql.Open("postgres", "postgres://postgres:0000@localhost:5432/order_db?sslmode=disable")
 	if err != nil {
 		log.Fatal("Failed to connect to DB:", err)
@@ -28,7 +31,7 @@ func main() {
 	r := gin.Default()
 	application.Handler.RegisterRoutes(r)
 
-	log.Println("Order Service running on :8080 (gRPC enabled)")
+	log.Println("Order Service running on :8080")
 	if err := r.Run(":8080"); err != nil {
 		log.Fatal(err)
 	}
