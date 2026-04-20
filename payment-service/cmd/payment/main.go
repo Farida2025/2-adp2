@@ -1,9 +1,11 @@
 package main
 
 import (
+	"context"
 	"database/sql"
 	"log"
 	"net"
+	"time"
 
 	"payment-service/internal/app"
 	grpcHandler "payment-service/internal/transport/grpc"
@@ -15,6 +17,13 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
 )
+
+func loggingInterceptor(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
+	start := time.Now()
+	resp, err := handler(ctx, req)
+	log.Printf("Method: %s, Duration: %s, Error: %v", info.FullMethod, time.Since(start), err)
+	return resp, err
+}
 
 func main() {
 	db, err := sql.Open("postgres", "postgres://postgres:0000@localhost:5432/payment_db?sslmode=disable")
@@ -31,7 +40,9 @@ func main() {
 			log.Fatalf("failed to listen for gRPC: %v", err)
 		}
 
-		s := grpc.NewServer()
+		s := grpc.NewServer(
+			grpc.UnaryInterceptor(loggingInterceptor),
+		)
 
 		paymentH := grpcHandler.NewPaymentGRPCHandler(application.PaymentUseCase)
 		pb.RegisterPaymentServiceServer(s, paymentH)
