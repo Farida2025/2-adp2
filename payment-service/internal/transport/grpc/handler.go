@@ -12,11 +12,12 @@ import (
 
 type PaymentGRPCHandler struct {
 	pb.UnimplementedPaymentServiceServer
-	uc *usecase.CreatePayment
+	uc     *usecase.CreatePayment
 }
 
 func NewPaymentGRPCHandler(uc *usecase.CreatePayment) *PaymentGRPCHandler {
 	return &PaymentGRPCHandler{uc: uc}
+
 }
 
 func (h *PaymentGRPCHandler) ProcessPayment(ctx context.Context, req *pb.PaymentRequest) (*pb.PaymentResponse, error) {
@@ -38,3 +39,4 @@ func (h *PaymentGRPCHandler) ProcessPayment(ctx context.Context, req *pb.Payment
 		Status:        resp.Status,
 	}, nil
 }
+

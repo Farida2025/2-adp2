@@ -1,6 +1,6 @@
 module order-service
 
-go 1.24.0
+go 1.25
 
 require (
 	github.com/Farida2025/assignment2-generated v1.0.3

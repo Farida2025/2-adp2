@@ -1,185 +1,80 @@
-# Advanced Programming 2 — Assignment 2
+# Advanced Programming 2 — Assignment 3: Event-Driven Architecture
 
-
-
-# Overview
-
-This project is a migration of a microservice system from REST to gRPC using a Contract-First approach.
-
-The system consists of two services:
-
-* Order Service (REST API + gRPC client)
-* Payment Service (REST API + gRPC server)
+## Overview
+This project evolves the microservice system from Assignment 2 by introducing **Event-Driven Architecture (EDA)**.  
+The system now uses **RabbitMQ** for asynchronous communication between services to handle notifications and ensure reliability.
 
 ---
 
-# Architecture
+## Architecture & Event Flow
 
-* Business logic (Use Cases) is unchanged from Assignment 1
-* Only the communication layer is migrated from REST to gRPC
+The system follows a **Choreography-based EDA** pattern.  
+Communication between **Order** and **Payment** remains synchronous (gRPC), while **Payment** and **Notification** interact asynchronously via RabbitMQ.
 
-```
-[ Client ]
-    ↓ REST (Gin)
-[ Order Service ]
-    ↓ gRPC
-[ Payment Service ]
-    ↓
-[ PostgreSQL ]
-```
+### Flow of Events:
+1. **Order Service** receives a REST request and calls **Payment Service** via gRPC.
+2. **Payment Service** processes the payment, stores it in `payment_db`, and publishes a `payment.completed` event to RabbitMQ.
+3. **RabbitMQ Broker** routes the message to the queue or to a **Dead Letter Queue (DLQ)** if processing fails.
+4. **Notification Service** consumes events, checks for duplicates (Idempotency), and sends a notification.
 
 ---
 
+## 🛠 Engineering Decisions
 
-# Repositories
+### 1. Idempotency Strategy
+To prevent duplicate notifications (e.g., message redelivery), an **in-memory idempotency mechanism** is used.
 
-### Proto Repository (Contract-First)
+- **Mechanism**: `map[string]bool` with `sync.Mutex`
+- **Key**: `OrderID`
+- **Logic**:
+    - If `OrderID` already processed → skip + ACK
+    - Otherwise → process and store
 
-Contains `.proto` files:
-https://github.com/Farida2025/assignment2-protos
-
----
-
-### Generated Code Repository
-
-Contains generated `.pb.go` files:
-https://github.com/Farida2025/assignment2-generated
 
 ---
 
-# Protobuf Contract
+### 2. Manual ACK & Reliability
 
-```proto
-syntax = "proto3";
+- **Auto-ACK disabled**
+- Messages are acknowledged **only after successful processing**
 
-package payment;
+#### Behavior:
+-  Success → `d.Ack(false)`
+-  Failure → `d.Nack(false, true)` (requeue)
 
-option go_package = "github.com/Farida2025/assignment2-generated/payment";
+This guarantees:
 
-service PaymentService {
-  rpc ProcessPayment (PaymentRequest) returns (PaymentResponse);
-}
+> **At-Least-Once Delivery**
 
-message PaymentRequest {
-  string order_id = 1;
-  int64 amount = 2;
-}
-
-message PaymentResponse {
-  string transaction_id = 1;
-  string status = 2;
-}
-```
+If the service crashes during processing:
+- message stays in queue
+- gets redelivered
 
 ---
 
-# Configuration
+### 3. Dead Letter Queue (DLQ)
 
-### Environment Variables
+To handle invalid or permanently failing messages:
 
-| Variable          | Description                                       |
-| ----------------- | ------------------------------------------------- |
-| PAYMENT_GRPC_ADDR | Address of Payment Service (e.g. localhost:50051) |
+- **Dead Letter Exchange**: `payment.dlx`
+- **Dead Letter Queue**: `payment.failed`
 
----
+#### Logic:
+- If message is invalid → `d.Nack(false, false)`
+- RabbitMQ moves it to DLQ
 
-# How to Run
+#### Example:
+- Simulated failure for amount = `666.66`
 
-## 1. Start PostgreSQL
-
-Create databases:
-
-```sql
-CREATE DATABASE order_db;
-CREATE DATABASE payment_db;
-```
+#### Result:
+- avoids infinite retries
+- enables debugging via RabbitMQ UI
 
 ---
 
-## 2. Run Payment Service
+##  How to Run with Docker
+
+### 1. Build and Start
 
 ```bash
-cd assignment1/payment-service
-go run cmd/payment/main.go
-```
-
-Runs:
-
-* gRPC server on :50051
-* REST API on :8081
-
----
-
-
-
-# API Endpoints
-
-## Order Service (REST)
-
-| Method | Endpoint           |
-| ------ | ------------------ |
-| POST   | /orders            |
-| GET    | /orders/:id        |
-| PATCH  | /orders/:id/cancel |
-
----
-
-## Payment Service (REST - optional)
-
-| Method | Endpoint            |
-| ------ | ------------------- |
-| POST   | /payments           |
-| GET    | /payments/:order_id |
-
----
-
-# gRPC Communication
-
-* Order Service acts as a gRPC client
-* Payment Service acts as a gRPC server
-* Communication uses strongly typed contracts
-
----
-
-# Timeout Handling
-
-Order Service uses a custom timeout (2 seconds):
-
-```go
-ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
-```
-
----
-
-# Error Handling
-
-Uses gRPC status codes:
-
-* codes.Internal — server error
-* codes.FailedPrecondition — payment declined
-
----
-
-# Design Highlights
-
-* Clean Architecture preserved
-* Dependency Inversion applied
-* No business logic in transport layer
-* Contract-First development
-* gRPC replaces REST between services
-* Environment-based configuration (no hardcoding)
-
----
-
-
-# Notes
-
-* REST is kept only for external clients
-* Internal communication is fully migrated to gRPC
-* Generated code is imported via Go modules
-
----
-
-# Conclusion
-
-This project demonstrates a full migration from REST to gRPC while preserving architectural principles and improving type safety, performance, and maintainability.
+docker-compose up --build

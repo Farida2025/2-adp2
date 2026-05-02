@@ -5,6 +5,9 @@ import (
 	"database/sql"
 	"log"
 	"net"
+	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"payment-service/internal/app"
@@ -26,40 +29,49 @@ func loggingInterceptor(ctx context.Context, req interface{}, info *grpc.UnarySe
 }
 
 func main() {
-	db, err := sql.Open("postgres", "postgres://postgres:0000@localhost:5432/payment_db?sslmode=disable")
+	dbURL := os.Getenv("DATABASE_URL")
+	db, err := sql.Open("postgres", dbURL)
 	if err != nil {
 		log.Fatal("Database connection error:", err)
 	}
 	defer db.Close()
 
-	application := app.NewApp(db)
+	amqpURL := os.Getenv("RABBITMQ_URL")
+	if amqpURL == "" {
+		amqpURL = "amqp://guest:guest@localhost:5672/"
+	}
+
+	application := app.NewApp(db, amqpURL)
+	defer application.RabbitMQ.Close()
+
+	stop := make(chan os.Signal, 1)
+	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
 
 	go func() {
 		lis, err := net.Listen("tcp", ":50051")
 		if err != nil {
 			log.Fatalf("failed to listen for gRPC: %v", err)
 		}
-
-		s := grpc.NewServer(
-			grpc.UnaryInterceptor(loggingInterceptor),
-		)
-
+		s := grpc.NewServer(grpc.UnaryInterceptor(loggingInterceptor))
 		paymentH := grpcHandler.NewPaymentGRPCHandler(application.PaymentUseCase)
 		pb.RegisterPaymentServiceServer(s, paymentH)
-
 		reflection.Register(s)
 
 		log.Println("Payment gRPC Server is running on :50051")
 		if err := s.Serve(lis); err != nil {
-			log.Fatalf("failed to serve gRPC: %v", err)
+			log.Printf("gRPC server stopped: %v", err)
 		}
 	}()
 
-	r := gin.Default()
-	application.Handler.RegisterRoutes(r)
+	go func() {
+		r := gin.Default()
+		application.Handler.RegisterRoutes(r)
+		log.Println("Payment HTTP Service is running on :8081")
+		if err := r.Run(":8081"); err != nil {
+			log.Printf("HTTP server stopped: %v", err)
+		}
+	}()
 
-	log.Println("Payment HTTP Service is running on :8081")
-	if err := r.Run(":8081"); err != nil {
-		log.Fatalf("failed to run HTTP: %v", err)
-	}
+	<-stop
+	log.Println("Shutting down payment-service gracefully...")
 }
