@@ -22,7 +22,8 @@ import (
 func main() {
 	godotenv.Load()
 
-	db, err := sql.Open("postgres", "postgres://postgres:0000@localhost:5432/order_db?sslmode=disable")
+	dbURL := os.Getenv("DATABASE_URL")
+	db, err := sql.Open("postgres", dbURL)
 	if err != nil {
 		log.Fatal("Failed to connect to DB:", err)
 	}

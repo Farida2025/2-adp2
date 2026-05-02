@@ -9,11 +9,19 @@ import (
 )
 
 type CreatePayment struct {
-	repo repository.PaymentRepository
+	repo     repository.PaymentRepository
+	notifier NotificationProvider
 }
 
-func NewCreatePayment(repo repository.PaymentRepository) *CreatePayment {
-	return &CreatePayment{repo: repo}
+type NotificationProvider interface {
+	SendPaymentNotification(ctx context.Context, orderID string, amount int64) error
+}
+
+func NewCreatePayment(repo repository.PaymentRepository, notifier NotificationProvider) *CreatePayment {
+	return &CreatePayment{
+		repo:     repo,
+		notifier: notifier,
+	}
 }
 
 type CreatePaymentCommand struct {
@@ -42,6 +50,13 @@ func (uc *CreatePayment) Execute(ctx context.Context, cmd CreatePaymentCommand) 
 	err := uc.repo.Save(ctx, payment)
 	if err != nil {
 		return CreatePaymentResponse{}, err
+	}
+
+	if uc.notifier != nil {
+		err = uc.notifier.SendPaymentNotification(ctx, payment.OrderID, payment.Amount)
+		if err != nil {
+			return CreatePaymentResponse{}, err
+		}
 	}
 
 	return CreatePaymentResponse{
